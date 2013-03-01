@@ -1,5 +1,5 @@
 # -*- coding: utf-8 -*-s#
- 
+import re 
 import logging
 logger = logging.getLogger(__name__)
 try:
@@ -7,11 +7,12 @@ try:
 except ImportError:
     from django.utils import simplejson as json
 
+from django.db.models import QuerySet, Model
 from django.conf import settings
 from django.core.paginator import Paginator, InvalidPage, EmptyPage, PageNotAnInteger
 from django.http import HttpResponse
 from django.core.serializers.json import DjangoJSONEncoder
-
+from django.core.serializers import serialize
 
 MAX_ITEM_PER_PAGE = getattr(settings, 'MAX_ITEM_PER_PAGE', 10)
 API_VERSION = getattr(settings, 'API_VERSION', 1)
