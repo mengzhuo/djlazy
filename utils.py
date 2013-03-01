@@ -17,7 +17,7 @@ MAX_ITEM_PER_PAGE = getattr(settings, 'MAX_ITEM_PER_PAGE', 10)
 API_VERSION = getattr(settings, 'API_VERSION', 1)
 
 
-__all__ = ('easy_api', 'easy_serialize', 'do_paginator')
+__all__ = ('easy_api', 'easy_serialize', 'do_paginator', 'map_attrs')
 
 def easy_api( target, status=200, defer=[] ):
     """
@@ -76,8 +76,7 @@ def easy_serialize(target, defer=[]):
             #XXX: re-load is bad for performence... but we don't re-invent serialize
             result = [filter_defer(item.get('fields'), defer) for item in struct]
         else:
-            struct = json.loads(serialize('json',
-                                                [target, ]))[0].get('fields')
+            struct = json.loads(serialize('json', [target, ]))[0].get('fields')
             result = filter_defer(struct, defer)
     except AttributeError:
         raise TypeError('%s is not a valid model' % target)
@@ -105,7 +104,20 @@ def do_paginator( origin_list, page, max_item_per_page=None):
         origin_list = paginator.page(paginator.num_pages)
 
     return origin_list
-    
+
+
+def map_attrs(obj, attr_list=None):
+    """
+        return objects' attrs into a dict
+        if attr_list is empty, try all public attr in __dict__
+    """
+    result = {}
+    if attr_list:
+        result.update({key:getattr(obj,key,None) for key in attr_list})
+    else:
+        result.update({key:value for (key, value) in obj.__dict__.iteritems() if not key[0] is "_" })
+
+    return result
 
 if __name__ == "__main__":
     #TODO: finish test units

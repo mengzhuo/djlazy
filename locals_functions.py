@@ -7,7 +7,7 @@ __all__ = ('tame_locals', 'smart_request', 'StruggleError',
            'IndependenceError')
 
 
-STANDARD_DJANGO_VIEW_LOCALS = ('request', )
+STANDARD_DJANGO_VIEW_LOCALS = ('request','req' )
 CALLER_LINE_REGEX = r'\(?([\w\-]+,?)*\)?=.*'
 
 
