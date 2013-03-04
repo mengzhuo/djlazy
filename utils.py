@@ -1,22 +1,21 @@
 # -*- coding: utf-8 -*-s#
-import re
+import json
 import logging
 logger = logging.getLogger(__name__)
-import json
 
-from django.db.models.query import QuerySet
-from django.db.models import Model
 from django.conf import settings
 from django.core.paginator import Paginator, EmptyPage, PageNotAnInteger
-from django.http import HttpResponse
 from django.core.serializers.json import DjangoJSONEncoder
-from django.core.serializers import serialize
+from django.core.serializers.python import Serializer as PythonSerializer
+from django.db.models.query import QuerySet
+from django.http import HttpResponse
+from django.utils.encoding import smart_unicode
 
 MAX_ITEM_PER_PAGE = getattr(settings, 'MAX_ITEM_PER_PAGE', 10)
 API_VERSION = getattr(settings, 'API_VERSION', 1)
 
 
-__all__ = ('easy_api', 'easy_serialize', 'do_paginator', 'yield_attrs')
+__all__ = ('easy_api', 'easy_serialize', 'EasySerializer', 'do_paginator', 'yield_attrs')
 
 
 def easy_api(target, status=200, defer=[]):
@@ -24,34 +23,14 @@ def easy_api(target, status=200, defer=[]):
     input a serialized instance dict
     return a standard json
     """
-    def key_to_JSON(key):
-        """
-        The standard JSON key is fooBar, but according to the PEP8,
-        all python vars should looks like foo_bar
-        this function cover all foo_bar->fooBar
-        """
-        return re.sub(r'_(\w)', lambda x: x.group(1).upper(), key)
-
     try:
-        if target.__class__ is QuerySet:
+        if target.__class__ is str:
+            result = target
+        else:
             result = easy_serialize(target, defer)
 
-        elif (Model in target.__class__.mro()) or (target.__class__ is dict):
-            # XXX: bad approach
-            if not target.__class__ is dict:
-                target = easy_serialize(target, defer)
-
-            result = {key_to_JSON(key): value for (
-                      key, value) in target.iteritems()}
-            result.update({'APIVersion': API_VERSION})
-
-        elif target.__class__ is str:
-            result = {target}
-        else:
-            raise TypeError("Don't support with %s" % target)
-
         result = json.dumps(result, cls=DjangoJSONEncoder)
-    except Exception, e:
+    except Exception as e:
         logger.warn(e)
         status = 202
         result = json.dumps({'apiError': e.message})
@@ -60,6 +39,21 @@ def easy_api(target, status=200, defer=[]):
                             content_type='application/json',
                             status=status)
 
+
+class EasySerializer(PythonSerializer):
+    """
+    Most of the time,
+    we don't need model or pk show on the API
+    """
+    internal_use_only = False
+
+    def end_object(self, obj):
+        appender = {'pk': smart_unicode(obj._get_pk_val())}
+        appender.update(self._current)
+        self.objects.append(appender)
+        self._current = None
+
+__serialier = EasySerializer()
 
 def easy_serialize(target, defer=[]):
     """
@@ -72,18 +66,13 @@ def easy_serialize(target, defer=[]):
                     for key, value in dict_to_fil.iteritems()
                     if key not in defer}
         else:
-            return dict_to_fil
+            return {key:value for key, value in dict_to_fil.iteritems()}
     try:
         if target.__class__ is QuerySet:
-            # such type is for single module
-            struct = json.loads(serialize('json', target.all()))
-            # XXX: re-load is bad for performence... but we don't re-invent
-            # serialize
-            result = [filter_defer(item.get('fields'), defer)
-                      for item in struct]
+            result = [filter_defer(item) for item in
+                      __serialier.serialize(target)]
         else:
-            struct = json.loads(serialize('json', [target, ]))[0].get('fields')
-            result = filter_defer(struct, defer)
+            result = filter_defer(yield_attrs(target), defer)
     except AttributeError:
         raise TypeError('%s is not a valid model' % target)
     else:
@@ -129,6 +118,7 @@ def yield_attrs(obj, attr_list=None):
             key, value) in obj.__dict__.iteritems() if not key[0] is "_"})
 
     return result
+
 
 ##### test unit #####
 def test_easy_api():
